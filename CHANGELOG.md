@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/tfohlmeister/convex-mcp-gateway/compare/v2.0.0...v2.0.1) (2026-09-30)
+
+
+### Bug Fixes
+
+* send a ConvexError's data to the client, not the runtime's message ([#73](https://github.com/tfohlmeister/convex-mcp-gateway/issues/73)) ([c6ef3e3](https://github.com/tfohlmeister/convex-mcp-gateway/commit/c6ef3e3f4eea25ff0ea206ae39c835eb1929d4ce)), closes [#71](https://github.com/tfohlmeister/convex-mcp-gateway/issues/71)
+
 ## [2.0.0](https://github.com/tfohlmeister/convex-mcp-gateway/compare/v1.0.0...v2.0.0) (2026-08-29)
 
 
