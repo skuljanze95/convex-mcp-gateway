@@ -2,16 +2,18 @@ import { httpRouter } from "convex/server";
 import {
   McpGateway,
   type McpAuthorizerHandler,
+  type McpPromptAuthorizerHandler,
   type McpResourceAuthorizerHandler,
 } from "convex-mcp-gateway";
 import { components, internal } from "./_generated/api.js";
 import { httpAction } from "./_generated/server.js";
 import {
+  conformancePrompts,
   conformanceResources,
   conformanceResourceTemplates,
   conformanceTools,
 } from "./conformance.js";
-import { resources, resourceTemplates, tools } from "./mcp.js";
+import { prompts, resources, resourceTemplates, tools } from "./mcp.js";
 
 const gateway = new McpGateway(components.mcpGateway);
 
@@ -100,6 +102,26 @@ export const authorizeResource: McpResourceAuthorizerHandler = async (
     return { allowed: true };
   }
   return { allowed: false, reason: "Forbidden: finance.admin role required" };
+};
+
+/**
+ * Prompt authorization, the prompt counterpart of `authorizeResource`.
+ * Any authenticated caller may list and get the example's prompts.
+ * `prompt_anonymous` is reachable only under the conformance switch
+ * below, the one mount that sets `anonymousPrompts`, and there it serves
+ * the `test_*` fixtures. Written first and explicitly for the reason
+ * `authorizeResource` gives: the branch under it ends in an allow.
+ */
+export const authorizePrompt: McpPromptAuthorizerHandler = async (
+  _ctx,
+  args,
+) => {
+  if (args.mode === "prompt_anonymous") {
+    return args.promptName.startsWith("test_")
+      ? { allowed: true }
+      : { allowed: false, reason: "Unauthorized: sign in to use prompts" };
+  }
+  return { allowed: true };
 };
 
 const http = httpRouter();
@@ -221,6 +243,12 @@ const mcpHandler = httpAction(async (ctx, request) =>
       : resourceTemplates,
     authorizeResource,
     auditResources: { read: true },
+    // MCP prompts: `invoices_review` normally, the `prompts-*` scenario
+    // fixtures under the conformance switch, which the suite gets
+    // anonymously for the same reason it gets the resource fixtures.
+    prompts: CONFORMANCE ? conformancePrompts : prompts,
+    anonymousPrompts: CONFORMANCE,
+    authorizePrompt,
     // Advertise subscription capability. The gateway tracks per-session
     // subscribe/unsubscribe state; this example's transport doesn't push,
     // so a real deployment would deliver notifications/resources/updated
