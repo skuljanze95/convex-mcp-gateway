@@ -106,11 +106,19 @@ export const authorizeResource: McpResourceAuthorizerHandler = async (
 
 /**
  * Prompt authorization, the prompt counterpart of `authorizeResource`.
- * Any authenticated caller may list and get the example's prompts.
- * `prompt_anonymous` is reachable only under the conformance switch
- * below, the one mount that sets `anonymousPrompts`, and there it serves
- * the `test_*` fixtures. Written first and explicitly for the reason
- * `authorizeResource` gives: the branch under it ends in an allow.
+ * Policy:
+ *
+ * - `prompt_anonymous`: reachable only under the conformance switch
+ *   below, the one mount that sets `anonymousPrompts`, and there it serves
+ *   the `test_*` fixtures. Written first and explicitly for the reason
+ *   `authorizeResource` gives: the branch under it ends in an allow.
+ * - `invoices_review` embeds the same JSON `invoice://{id}` serves, so it
+ *   needs what reading that resource needs: the `finance.admin` role. A
+ *   prompt's `get` loads through the HTTP action's `ctx`, which is not
+ *   scoped to the caller, so this check is the only thing between any
+ *   signed-in user and every invoice. Applied to `prompt_list` as well,
+ *   so a caller is never shown a prompt it cannot use.
+ * - Anything else: any authenticated caller.
  */
 export const authorizePrompt: McpPromptAuthorizerHandler = async (
   _ctx,
@@ -120,6 +128,16 @@ export const authorizePrompt: McpPromptAuthorizerHandler = async (
     return args.promptName.startsWith("test_")
       ? { allowed: true }
       : { allowed: false, reason: "Unauthorized: sign in to use prompts" };
+  }
+  if (args.promptName === "invoices_review") {
+    const claims = (args.identity.claims ?? {}) as { roles?: unknown };
+    const roles = claims.roles;
+    if (!Array.isArray(roles) || !roles.includes("finance.admin")) {
+      return {
+        allowed: false,
+        reason: "Forbidden: finance.admin role required",
+      };
+    }
   }
   return { allowed: true };
 };

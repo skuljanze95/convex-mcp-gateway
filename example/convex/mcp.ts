@@ -289,8 +289,12 @@ export const resourceTemplates: McpResourceTemplateProvider[] = [
  *
  * `get` runs in the HTTP action with the same `ctx` a resource read gets,
  * so a prompt can load data: this one embeds the invoice it is about, as
- * the same JSON `invoice://{id}` serves. The gateway has already checked
- * the arguments (only `invoiceId`, present, a string) and the caller.
+ * the same JSON `invoice://{id}` serves. That `ctx` is not scoped to the
+ * caller, so the prompt is gated as strictly as the resource:
+ * `authorizePrompt` in `http.ts` requires the same `finance.admin` role
+ * `authorizeResource` requires for `invoice://{id}`. By the time `get`
+ * runs, the gateway has checked that and the arguments (only
+ * `invoiceId`, present, a string).
  */
 export const prompts: McpPromptProvider[] = [
   defineMcpPrompt({

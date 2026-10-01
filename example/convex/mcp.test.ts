@@ -4474,7 +4474,10 @@ describe("conformance fixtures (MCP_CONFORMANCE mount)", () => {
 });
 
 describe("prompts (host-mounted /mcp/)", () => {
+  // Signed in without roles, and signed in with `finance.admin`, which
+  // `invoices_review` requires (see `authorizePrompt` in http.ts).
   const AUTH = { authorization: "Bearer valid-userinfo-token" };
+  const ADMIN = { authorization: "Bearer valid-admin-token" };
 
   type RpcBody = {
     result?: Record<string, unknown>;
@@ -4502,7 +4505,7 @@ describe("prompts (host-mounted /mcp/)", () => {
     expect(body.result.capabilities.prompts).toEqual({});
   });
 
-  test("prompts/list requires auth and lists the review prompt", async () => {
+  test("prompts/list requires auth, and shows the review prompt to admins only", async () => {
     const t = newTest();
     const session = await initialize(t);
 
@@ -4511,12 +4514,22 @@ describe("prompts (host-mounted /mcp/)", () => {
     ).json()) as RpcBody;
     expect(anon.error?.code).toBe(-32001);
 
-    const listed = (await (
+    const member = (await (
       await rpc(
         t,
         session,
         { jsonrpc: "2.0", id: 3, method: "prompts/list" },
         AUTH,
+      )
+    ).json()) as RpcBody;
+    expect(member.result).toEqual({ prompts: [] });
+
+    const listed = (await (
+      await rpc(
+        t,
+        session,
+        { jsonrpc: "2.0", id: 4, method: "prompts/list" },
+        ADMIN,
       )
     ).json()) as RpcBody;
     expect(listed.result).toEqual({
@@ -4551,7 +4564,7 @@ describe("prompts (host-mounted /mcp/)", () => {
           method: "prompts/get",
           params: { name: "invoices_review", arguments: { invoiceId: id } },
         },
-        AUTH,
+        ADMIN,
       )
     ).json()) as {
       result: {
@@ -4577,6 +4590,33 @@ describe("prompts (host-mounted /mcp/)", () => {
     expect(instruction!.content).toMatchObject({ type: "text" });
   });
 
+  test("prompts/get refuses the invoice to a caller without finance.admin", async () => {
+    const t = newTest();
+    const id = await t.mutation(api.invoices.seed, {});
+    const session = await initialize(t);
+    const res = await rpc(
+      t,
+      session,
+      {
+        jsonrpc: "2.0",
+        id: 7,
+        method: "prompts/get",
+        params: { name: "invoices_review", arguments: { invoiceId: id } },
+      },
+      AUTH,
+    );
+    const text = await res.text();
+    // The same answer `resources/read` of `invoice://{id}` gives this
+    // caller, and none of the invoice in it.
+    expect(JSON.parse(text)).toMatchObject({
+      error: {
+        code: -32003,
+        message: "Forbidden: finance.admin role required",
+      },
+    });
+    expect(text).not.toContain("42");
+  });
+
   test("prompts/get answers a missing argument and a missing invoice", async () => {
     const t = newTest();
     const session = await initialize(t);
@@ -4591,7 +4631,7 @@ describe("prompts (host-mounted /mcp/)", () => {
           method: "prompts/get",
           params: { name: "invoices_review" },
         },
-        AUTH,
+        ADMIN,
       )
     ).json()) as RpcBody;
     expect(missing.error).toEqual({
@@ -4611,7 +4651,7 @@ describe("prompts (host-mounted /mcp/)", () => {
           method: "prompts/get",
           params: { name: "invoices_review", arguments: { invoiceId: "nope" } },
         },
-        AUTH,
+        ADMIN,
       )
     ).json()) as RpcBody;
     expect(unknown.error).toEqual({ code: -32603, message: "No invoice nope" });

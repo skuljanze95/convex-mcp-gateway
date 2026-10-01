@@ -61,6 +61,13 @@ called only for `prompts/get` of its own name, after authorization, with
 `arguments` already checked against the declaration (see
 [Arguments](#arguments)).
 
+That `ctx` is the HTTP action's, not the MCP caller's: `ctx.runQuery` is
+not scoped to whoever is asking. So whatever `get` loads must be gated by
+`authorizePrompt` (or by `get` itself, on `identity`) as strictly as the
+matching resource. The example's `invoices_review` embeds the JSON
+`invoice://{id}` serves, so its `authorizePrompt` requires the same
+`finance.admin` role `authorizeResource` requires for that resource.
+
 Prompts are **runtime-only**. Unlike resources and tools, nothing is
 persisted in the component registry: a mount serves exactly the prompts
 passed to it, so there is no sync step and no fingerprint. Names must be
@@ -115,7 +122,9 @@ The spec types every argument value as a string, so there is no schema:
 
 An undeclared argument is refused rather than dropped, the way a tool's
 input schema refuses one, so a misspelt name fails loudly instead of
-reaching `get` as a missing value.
+reaching `get` as a missing value. `get` receives a null-prototype copy
+of what the client sent, so an optional argument the client left out
+reads as `undefined` whatever its name (`toString` included).
 
 ## Authorization
 
@@ -155,8 +164,8 @@ const authorizePrompt: McpPromptAuthorizerHandler = async (_ctx, args) => {
   }
   if (args.promptName === "invoices_review") {
     const roles = (args.identity.claims ?? {}).roles;
-    if (!Array.isArray(roles) || !roles.includes("finance")) {
-      return { allowed: false, reason: "Forbidden: finance role required" };
+    if (!Array.isArray(roles) || !roles.includes("finance.admin")) {
+      return { allowed: false, reason: "Forbidden: finance.admin role required" };
     }
   }
   return { allowed: true };

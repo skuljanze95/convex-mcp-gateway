@@ -6675,6 +6675,57 @@ describe("prompts", () => {
       expect(ran).toBe(false);
     });
 
+    test("an argument named like an Object.prototype member is never inherited", async () => {
+      const component = createComponent();
+      const seen: Array<Record<string, string>> = [];
+      const tricky = defineMcpPrompt({
+        name: "tricky",
+        arguments: [
+          { name: "constructor", required: true },
+          { name: "toString" },
+        ],
+        get: (_ctx, { arguments: args }) => {
+          seen.push(args);
+          return {
+            messages: [
+              {
+                role: "user",
+                content: { type: "text", text: typeof args.toString },
+              },
+            ],
+          };
+        },
+      });
+
+      // A required one the client left out is missing, not `Object`.
+      const missing = await call(
+        createCtx(component),
+        component,
+        { prompts: [tricky] },
+        "prompts/get",
+        { name: "tricky" },
+      );
+      expect(missing.body.error).toEqual({
+        code: -32602,
+        message: 'Missing required argument "constructor" for prompt "tricky"',
+      });
+      expect(seen).toEqual([]);
+
+      // An optional one the client left out reaches `get` as undefined,
+      // not as `Object.prototype.toString`.
+      const served = await call(
+        createCtx(component),
+        component,
+        { prompts: [tricky] },
+        "prompts/get",
+        { name: "tricky", arguments: { constructor: "c" } },
+      );
+      expect(served.body.result).toMatchObject({
+        messages: [{ content: { type: "text", text: "undefined" } }],
+      });
+      expect(seen[0]!.constructor).toBe("c");
+    });
+
     test("authorizes before the name is resolved", async () => {
       const component = createComponent();
       const seen: McpPromptAuthorizerArgs[] = [];

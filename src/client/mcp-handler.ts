@@ -2753,9 +2753,10 @@ let warnedRequireAuthWithoutOAuth = false;
  *
  * Called from the `requireAuth` gate, from the anonymous task-augmented
  * `tools/call` and `tasks/*` paths, and from the three resource methods
- * when the host's authorizer denies an anonymous caller with an
- * `unauth`-shaped reason. Only the read path passes a reason through; a
- * list discards its per-candidate reasons, so it takes the generic one.
+ * and the two prompt methods when the host's authorizer denies an
+ * anonymous caller with an `unauth`-shaped reason. Only the read and get
+ * paths pass a reason through; a list discards its per-candidate
+ * reasons, so it takes the generic one.
  */
 async function requireAuthChallenge(
   ctx: HandlerCtx,
@@ -3308,7 +3309,12 @@ function describePromptArgumentsProblem(
     }
   }
   for (const argument of declared) {
-    if (argument.required && args[argument.name] === undefined) {
+    // Own properties only: an inherited one (`constructor`, `toString`)
+    // would count as present when the client omitted it.
+    if (
+      argument.required &&
+      !Object.prototype.hasOwnProperty.call(args, argument.name)
+    ) {
       return (
         `Missing required argument "${argument.name}" for prompt ` +
         `"${prompt.name}"`
@@ -5331,7 +5337,14 @@ async function handlePost(
         );
         break;
       }
-      const promptArguments = rawArguments as Record<string, string>;
+      // A null-prototype copy of what the client sent, so `get` reading an
+      // argument it left out gets `undefined` whatever the name, rather
+      // than an inherited `Object.prototype` member (an optional argument
+      // named `toString` would otherwise arrive as a function).
+      const promptArguments: Record<string, string> = Object.assign(
+        Object.create(null) as Record<string, string>,
+        rawArguments,
+      );
       // Authorized before the name is resolved, so a caller who may not
       // get a prompt cannot tell a hidden prompt from a missing one.
       const promptAuthz = await safeAuthorizePrompt(
